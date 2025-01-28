@@ -23,7 +23,6 @@ import {
   DEEPSEEK_SUMMARIZE_MODEL,
   KnowledgeCutOffDate,
   MCP_SYSTEM_TEMPLATE,
-  MCP_TOOLS_TEMPLATE,
   ServiceProvider,
   StoreKey,
   SUMMARIZE_MODEL,
@@ -207,18 +206,18 @@ async function getMcpSystemPrompt(): Promise<string> {
 
   let toolsStr = "";
 
-  tools.forEach((i) => {
-    // error client has no tools
-    if (!i.tools) return;
+  // tools.forEach((i) => {
+  //   // error client has no tools
+  //   if (!i.tools) return;
 
-    toolsStr += MCP_TOOLS_TEMPLATE.replace(
-      "{{ clientId }}",
-      i.clientId,
-    ).replace(
-      "{{ tools }}",
-      i.tools.tools.map((p: object) => JSON.stringify(p, null, 2)).join("\n"),
-    );
-  });
+  //   toolsStr += MCP_TOOLS_TEMPLATE.replace(
+  //     "{{ clientId }}",
+  //     i.clientId,
+  //   ).replace(
+  //     "{{ tools }}",
+  //     i.tools.tools.map((p: object) => JSON.stringify(p, null, 2)).join("\n"),
+  //   );
+  // });
 
   return MCP_SYSTEM_TEMPLATE.replace("{{ MCP_TOOLS }}", toolsStr);
 }

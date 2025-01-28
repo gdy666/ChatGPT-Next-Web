@@ -17,8 +17,6 @@ import {
   getClientTools,
   getMcpConfigFromFile,
   isMcpEnabled,
-  pauseMcpServer,
-  restartAllClients,
   resumeMcpServer,
 } from "../mcp/actions";
 import {
@@ -213,8 +211,8 @@ export function McpMarketPage() {
         ...(Object.keys(env).length > 0 ? { env } : {}),
       };
 
-      const newConfig = await addMcpServer(savingServerId, serverConfig);
-      setConfig(newConfig);
+      //const newConfig = await addMcpServer(savingServerId, serverConfig);
+      //setConfig(newConfig);
       showToast("Server configuration updated successfully");
     } catch (error) {
       showToast(
@@ -283,8 +281,8 @@ export function McpMarketPage() {
   const pauseServer = async (id: string) => {
     try {
       updateLoadingState(id, "Stopping server...");
-      const newConfig = await pauseMcpServer(id);
-      setConfig(newConfig);
+      //const newConfig = await pauseMcpServer(id);
+      //setConfig(newConfig);
       showToast("Server stopped successfully");
     } catch (error) {
       showToast("Failed to stop server");
@@ -315,8 +313,8 @@ export function McpMarketPage() {
   const handleRestartAll = async () => {
     try {
       updateLoadingState("all", "Restarting all servers...");
-      const newConfig = await restartAllClients();
-      setConfig(newConfig);
+      //const newConfig = await restartAllClients();
+      //setConfig(newConfig);
       showToast("Restarting all clients");
     } catch (error) {
       showToast("Failed to restart clients");
