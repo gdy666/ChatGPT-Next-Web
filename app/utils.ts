@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { showToast } from "./components/ui-lib";
 import Locale from "./locales";
 import { RequestMessage } from "./client/api";
-import { ServiceProvider } from "./constant";
+import {
+  REQUEST_TIMEOUT_MS,
+  REQUEST_TIMEOUT_MS_FOR_THINKING,
+  ServiceProvider,
+} from "./constant";
 // import { fetch as tauriFetch, ResponseType } from "@tauri-apps/api/http";
 import { fetch as tauriStreamFetch } from "./utils/stream";
 import { VISION_MODEL_REGEXES, EXCLUDE_VISION_MODEL_REGEXES } from "./constant";
@@ -241,6 +245,28 @@ export function getMessageTextContent(message: RequestMessage) {
   return "";
 }
 
+export function getMessageTextContentWithoutThinking(message: RequestMessage) {
+  let content = "";
+
+  if (typeof message.content === "string") {
+    content = message.content;
+  } else {
+    for (const c of message.content) {
+      if (c.type === "text") {
+        content = c.text ?? "";
+        break;
+      }
+    }
+  }
+
+  // Filter out thinking lines (starting with "> ")
+  return content
+    .split("\n")
+    .filter((line) => !line.startsWith("> ") && line.trim() !== "")
+    .join("\n")
+    .trim();
+}
+
 export function getMessageImages(message: RequestMessage): string[] {
   if (typeof message.content === "string") {
     return [];
@@ -256,9 +282,7 @@ export function getMessageImages(message: RequestMessage): string[] {
 
 export function isVisionModel(model: string) {
   const visionModels = useAccessStore.getState().visionModels;
-  const envVisionModels = visionModels
-    ?.split(",")
-    .map((m) => m.trim());
+  const envVisionModels = visionModels?.split(",").map((m) => m.trim());
   if (envVisionModels?.includes(model)) {
     return true;
   }
@@ -270,6 +294,20 @@ export function isVisionModel(model: string) {
 
 export function isDalle3(model: string) {
   return "dall-e-3" === model;
+}
+
+export function getTimeoutMSByModel(model: string) {
+  model = model.toLowerCase();
+  if (
+    model.startsWith("dall-e") ||
+    model.startsWith("dalle") ||
+    model.startsWith("o1") ||
+    model.startsWith("o3") ||
+    model.includes("deepseek-r") ||
+    model.includes("-thinking")
+  )
+    return REQUEST_TIMEOUT_MS_FOR_THINKING;
+  return REQUEST_TIMEOUT_MS;
 }
 
 export function getModelSizes(model: string): ModelSize[] {

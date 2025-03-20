@@ -1,6 +1,11 @@
 "use client";
 // azure and openai, using same models. so using same LLMApi.
-import { ApiPath, DEEPSEEK_BASE_URL, DeepSeek } from "@/app/constant";
+import {
+  ApiPath,
+  SILICONFLOW_BASE_URL,
+  SiliconFlow,
+  DEFAULT_MODELS,
+} from "@/app/constant";
 import {
   useAccessStore,
   useAppConfig,
@@ -8,7 +13,7 @@ import {
   ChatMessageTool,
   usePluginStore,
 } from "@/app/store";
-import { streamWithThink } from "@/app/utils/chat";
+import { preProcessImageContent, streamWithThink } from "@/app/utils/chat";
 import {
   ChatOptions,
   getHeaders,
@@ -20,13 +25,23 @@ import { getClientConfig } from "@/app/config/client";
 import {
   getMessageTextContent,
   getMessageTextContentWithoutThinking,
+  isVisionModel,
   getTimeoutMSByModel,
 } from "@/app/utils";
 import { RequestPayload } from "./openai";
-import { fetch } from "@/app/utils/stream";
 
-export class DeepSeekApi implements LLMApi {
-  private disableListModels = true;
+import { fetch } from "@/app/utils/stream";
+export interface SiliconFlowListModelResponse {
+  object: string;
+  data: Array<{
+    id: string;
+    object: string;
+    root: string;
+  }>;
+}
+
+export class SiliconflowApi implements LLMApi {
+  private disableListModels = false;
 
   path(path: string): string {
     const accessStore = useAccessStore.getState();
@@ -34,19 +49,22 @@ export class DeepSeekApi implements LLMApi {
     let baseUrl = "";
 
     if (accessStore.useCustomConfig) {
-      baseUrl = accessStore.deepseekUrl;
+      baseUrl = accessStore.siliconflowUrl;
     }
 
     if (baseUrl.length === 0) {
       const isApp = !!getClientConfig()?.isApp;
-      const apiPath = ApiPath.DeepSeek;
-      baseUrl = isApp ? DEEPSEEK_BASE_URL : apiPath;
+      const apiPath = ApiPath.SiliconFlow;
+      baseUrl = isApp ? SILICONFLOW_BASE_URL : apiPath;
     }
 
     if (baseUrl.endsWith("/")) {
       baseUrl = baseUrl.slice(0, baseUrl.length - 1);
     }
-    if (!baseUrl.startsWith("http") && !baseUrl.startsWith(ApiPath.DeepSeek)) {
+    if (
+      !baseUrl.startsWith("http") &&
+      !baseUrl.startsWith(ApiPath.SiliconFlow)
+    ) {
       baseUrl = "https://" + baseUrl;
     }
 
@@ -64,34 +82,18 @@ export class DeepSeekApi implements LLMApi {
   }
 
   async chat(options: ChatOptions) {
+    const visionModel = isVisionModel(options.config.model);
     const messages: ChatOptions["messages"] = [];
     for (const v of options.messages) {
       if (v.role === "assistant") {
         const content = getMessageTextContentWithoutThinking(v);
         messages.push({ role: v.role, content });
       } else {
-        const content = getMessageTextContent(v);
+        const content = visionModel
+          ? await preProcessImageContent(v.content)
+          : getMessageTextContent(v);
         messages.push({ role: v.role, content });
       }
-    }
-
-    // 检测并修复消息顺序，确保除system外的第一个消息是user
-    const filteredMessages: ChatOptions["messages"] = [];
-    let hasFoundFirstUser = false;
-
-    for (const msg of messages) {
-      if (msg.role === "system") {
-        // Keep all system messages
-        filteredMessages.push(msg);
-      } else if (msg.role === "user") {
-        // User message directly added
-        filteredMessages.push(msg);
-        hasFoundFirstUser = true;
-      } else if (hasFoundFirstUser) {
-        // After finding the first user message, all subsequent non-system messages are retained.
-        filteredMessages.push(msg);
-      }
-      // If hasFoundFirstUser is false and it is not a system message, it will be skipped.
     }
 
     const modelConfig = {
@@ -104,7 +106,7 @@ export class DeepSeekApi implements LLMApi {
     };
 
     const requestPayload: RequestPayload = {
-      messages: filteredMessages,
+      messages,
       stream: options.config.stream,
       model: modelConfig.model,
       temperature: modelConfig.temperature,
@@ -122,7 +124,7 @@ export class DeepSeekApi implements LLMApi {
     options.onController?.(controller);
 
     try {
-      const chatPath = this.path(DeepSeek.ChatPath);
+      const chatPath = this.path(SiliconFlow.ChatPath);
       const chatPayload = {
         method: "POST",
         body: JSON.stringify(requestPayload),
@@ -130,7 +132,9 @@ export class DeepSeekApi implements LLMApi {
         headers: getHeaders(),
       };
 
-      // make a fetch request
+      // console.log(chatPayload);
+
+      // Use extended timeout for thinking models as they typically require more processing time
       const requestTimeoutId = setTimeout(
         () => controller.abort(),
         getTimeoutMSByModel(options.config.model),
@@ -248,6 +252,36 @@ export class DeepSeekApi implements LLMApi {
   }
 
   async models(): Promise<LLMModel[]> {
-    return [];
+    if (this.disableListModels) {
+      return DEFAULT_MODELS.slice();
+    }
+
+    const res = await fetch(this.path(SiliconFlow.ListModelPath), {
+      method: "GET",
+      headers: {
+        ...getHeaders(),
+      },
+    });
+
+    const resJson = (await res.json()) as SiliconFlowListModelResponse;
+    const chatModels = resJson.data;
+    console.log("[Models]", chatModels);
+
+    if (!chatModels) {
+      return [];
+    }
+
+    let seq = 1000; //同 Constant.ts 中的排序保持一致
+    return chatModels.map((m) => ({
+      name: m.id,
+      available: true,
+      sorted: seq++,
+      provider: {
+        id: "siliconflow",
+        providerName: "SiliconFlow",
+        providerType: "siliconflow",
+        sorted: 14,
+      },
+    }));
   }
 }
